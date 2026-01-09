@@ -1,99 +1,115 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
 
-typedef struct exersise{
-    double num1;
-    char operator1;
-    double num2;
-    char operator2;
-    double num3;
-    char operator3; // I think i won't use it, but I need place for this unusable piece to be :(
-} EXERCISE;
+#define NUM_SIZE    128
 
+typedef struct operator{
+    unsigned char op : 6; //6bits enough for 64 numbers, if you use symbol that have bigger number in ASCII, just remove ": 6", and ": 2"
+    char pr : 2; //priority of the operator. 2bits enough for numbers in range [-2; 1], enough for what we need.
+} OP;
 
-// Function to get non-space symbol from inputBuf
-char getC(const char *inputBuf, int *i)
+typedef struct tokens{
+    double nums[NUM_SIZE];
+    OP ops[NUM_SIZE -1];
+} TOK;
+
+// gets char that isn't space(' ') and returns it
+char getC(void)
 {
     char c;
-    do { c = inputBuf[(*i)++]; } while (c == ' ');
+    do{c=getchar();}while(c==' ');
     return c;
 }
 
-// Reads numbers and write them where you want.
-double parser(double *num, const char *inputBuf, int *i, char *operator)
+double solver(TOK *tokens, int *numAm)
 {
-    *num = 0;
-    char c = getC(inputBuf, i);
-    if (isdigit(c)) {
-        do {
-            *num = *num * 10 + (c - '0');
-            c = getC(inputBuf, i);
-        } while (isdigit(c));
-        if(c == '.' || c == ','){
-            c = getC(inputBuf, i);
-            do {
-                double weight = 0.1;
-                *num = *num + (c - '0') * weight;
-                weight/=10;
-                c = getC(inputBuf, i);
-            } while (isdigit(c));
-        }
-        (*i)--;
-    }
-
-    if (c == '+' || c == '-' || c == '*' || c == '/' || c == '=' || c == '\0') {
-        *operator = c;
-        c = getC(inputBuf, i);
-    } else {
-        printf("Error: Unknown symbol '%c'", c);
-        return 1;
-    }
-    return 0;
-}
-double solver(EXERCISE *ex){
+    TOK temp;
+    int i, j;
     double res;
 
-    if((ex->operator3 == '=' || ex->operator3 == '\0') && (ex->operator2 == '*' || ex->operator2 == '/')){
-        switch (ex->operator2) {
-        case '*': res = ex->num2 * ex->num3; break;
-        case '/': res = ex->num2 / ex->num3; break;
+    for(int i=0; i<(*numAm-1); ++i){
+        if(tokens->ops[i].pr==1){
+            j = i;
+            res = tokens->nums[i];
+            while(tokens->ops[i].pr==1){
+                switch (tokens->ops[i].op)
+                {
+                case '*': res *= tokens->nums[++i];     break;
+                case '/': res /= tokens->nums[++i];     break;
+                }
+            }
+            temp.nums[j]=res;
+            temp.ops[j].op='+';
+            temp.ops[j].pr=0;
+        } else{
+            temp.ops[i] = tokens->ops[i];
+            temp.nums[i] = tokens->nums[i];
         }
-    } else switch (ex->operator1) {
-        case '+': res = ex->num1 + ex->num2; break;
-        case '-': res = ex->num1 - ex->num2; break;
-        case '*': res = ex->num1 * ex->num2; break;
-        case '/': res = ex->num1 / ex->num2; break;
         }
+
+    for(int u=0; u<j; ++u){
+        switch(temp.ops[u].op)
+        {
+            case '+': res += temp.nums[u];    break;
+            case '-': res -= temp.nums[u];    break;
+        }
+    }
 
     return res;
 }
-// Function that parse and solve math exercises from inputBuf.
-int solve(const char *inputBuf)
+
+// the function that parses elements, and gives it to solver func
+int parser(void)
 {
-    EXERCISE ex;
-    int i = 0;
-    
+    int numIndx=0, opIndx=0;// numIndx - index that needed to add numbers into numbers array, opIndx is the same as numIndx, but for operators
+    double num, weight;
+    char c;
+    TOK tokens; 
 
-    parser(&ex.num1, inputBuf, &i, &ex.operator1);
-    parser(&ex.num2, inputBuf, &i, &ex.operator2);
-    parser(&ex.num3, inputBuf, &i, &ex.operator3);
+    do{
+        c=getC();
+        if(isdigit(c)){
+            num=0;
+            do{
+                num = num*10+(c-'0');
+                c=getC();                
+            }while(isdigit(c));
 
-    double res = solver(&ex);
+            if(c=='.'||c==','){// for real numbers
+                c=getC();
+                do{
+                    weight=0.1;
+                    num = num+(c-'0')*weight;
+                    weight*=0.1;
+                    c=getC();
+                }while(isdigit(c));
+            }
+            
+            tokens.nums[numIndx] = num;
+            ++numIndx;
+            ungetc(c, stdin);
+        } else if(c=='+'||c=='-'){
+            tokens.ops[opIndx].op = c;
+            tokens.ops[opIndx].pr = 0;
+            ++opIndx;
+        } else if(c=='*'||c=='/'||c=='%'){
+            tokens.ops[opIndx].op = c;
+            tokens.ops[opIndx].pr = 1;
+            ++opIndx;
+        } else printf("\nError: there is no symbol '%c';\n", c);
+    }while(c!='='&&c!='\n');
 
-    printf("First number: %.2f;\nSecond number: %.2f;\nThird number: %.2f;\nResult: %.2f;", ex.num1, ex.num2, ex.num3, res);
+    printf("Answer: %.2f", solver(&tokens, &numIndx));
+
+//    printf("%d\n%d\n%c", tokens.numbers[0], tokens.numbers[1], tokens.operators[0]);
+
     return 0;
 }
 
 int main(void)
 {
-    char inputBuf[64];
-    puts("Enter your equation:");
-    fgets(inputBuf, 64, stdin);
-    inputBuf[strcspn(inputBuf, "\n")] = '\0';
-
-    solve(inputBuf);
+    parser();
 
     return 0;
 }
